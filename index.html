@@ -532,15 +532,25 @@ function onFileInput(e) {
 
 function keepPhoto() {
   document.getElementById('preview-overlay').classList.remove('active');
-  if (_editPhotoIdx >= 0) {
-    // Editing existing photo
-    _photos[_editPhotoIdx].dataUrl = _pendingDataUrl;
-  } else {
-    // New photo
-    _photos.push({ dataUrl: _pendingDataUrl, fileName: '', groupKey: null, groupLabel: null, device: null, abnormal: null, classified: false });
-  }
-  _pendingDataUrl = null;
-  _editPhotoIdx = -1;
+  // V9: 這裡是「所有照片」的唯一入口 —— 不論是直接按「✓ 加入」還是進編輯器畫完儲存，
+  //      都會經過 keepPhoto()。壓縮放在這一層才蓋得到全部路徑。
+  var idx = _editPhotoIdx, src = _pendingDataUrl;
+  v9CompressDataUrl(src).then(function(compressed) {
+    _pendingDataUrl = compressed;
+    if (idx >= 0) {
+      // Editing existing photo
+      _photos[idx].dataUrl = _pendingDataUrl;
+    } else {
+      // New photo
+      _photos.push({ dataUrl: _pendingDataUrl, fileName: '', groupKey: null, groupLabel: null, device: null, abnormal: null, classified: false });
+    }
+    _pendingDataUrl = null;
+    _editPhotoIdx = -1;
+    v9AfterKeep();
+  });
+}
+
+function v9AfterKeep() {
   renderPhotoGrid();
 
   // V6: Continue-next mode (triggered from "繼續下一張" on Step 3)
@@ -2044,7 +2054,7 @@ function saveEditor() {
 // ---------- V9: 相片壓縮（LINE 配方） ----------
 // 只在 doneEditing() 出口壓一次 → IndexedDB / 匯出包 / 報告 / 存相簿 四個出口全部瘦身。
 // 失敗一律回退原圖，絕不擋住存檔流程。
-var V9_COMPRESS = { maxWidthOrHeight: 2048, maxSizeMB: 0.5, useWebWorker: true, initialQuality: 0.8 };
+var V9_COMPRESS = { maxWidthOrHeight: 2048, maxSizeMB: 0.15, useWebWorker: true, initialQuality: 0.8 };
 
 function v9CompressDataUrl(dataUrl) {
   return new Promise(function(resolve) {
@@ -2084,15 +2094,11 @@ function doneEditing() {
     _cv.setViewportTransform([1,0,0,1,0,0]);
     _cv.renderAll();
   }
-  var raw = _cv.toDataURL({ format:'jpeg', quality:0.95 });
+  _pendingDataUrl = _cv.toDataURL({ format:'jpeg', quality:0.95 });
   closeEditor();
-  // V9: 先壓縮再存入 _pendingDataUrl，確保四個出口都拿到壓縮後的圖
-  v9CompressDataUrl(raw).then(function(compressed) {
-    _pendingDataUrl = compressed;
-    // Show preview again with the edited image, then auto-keep
-    document.getElementById('previewImage').src = _pendingDataUrl;
-    keepPhoto();
-  });
+  // Show preview again with the edited image, then auto-keep
+  document.getElementById('previewImage').src = _pendingDataUrl;
+  keepPhoto();
   // V6: Auto-jump moved to keepPhoto()
 }
 
