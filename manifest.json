@@ -1,7 +1,7 @@
 {
   "name": "設備維護師日巡系統",
   "short_name": "日巡",
-  "description": "日巡系統 V8：照片與資料存在手機本機，報告直接本機產出",
+  "description": "日巡系統 V9：照片與資料存在手機本機，報告直接本機產出",
   "lang": "zh-TW",
   "start_url": "./",
   "scope": "./",

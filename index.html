@@ -1053,10 +1053,30 @@ function genFN(dn, al, seq) {
 // V8: 本機儲存（資料不進雲端，存在手機/電腦自己裝置）
 // ============================================================
 var v8DB = null;
-function v8Open() {
+var v9Migrated = false;
+// V9: 資料庫改名 pwa-v8 → pwa-v9，並自動搬移舊資料（只搬一次，搬完才刪舊庫）
+var V9_DB_NAME = 'pwa-v9', V8_DB_NAME = 'pwa-v8';
+function v9ReadOldDB() {
+  return new Promise(function(resolve) {
+    var rq;
+    try { rq = indexedDB.open(V8_DB_NAME); } catch (e) { resolve(null); return; }
+    rq.onsuccess = function() {
+      var old = rq.result;
+      if (!old.objectStoreNames.contains('sessions')) { old.close(); resolve(null); return; }
+      try {
+        var g = old.transaction('sessions').objectStore('sessions').get('current');
+        g.onsuccess = function() { var v = g.result || null; old.close(); resolve(v); };
+        g.onerror = function() { old.close(); resolve(null); };
+      } catch (e) { old.close(); resolve(null); }
+    };
+    rq.onerror = function() { resolve(null); };
+    rq.onupgradeneeded = function() { /* 舊庫不存在，會被建立成空庫 → 下面視為無資料 */ };
+  });
+}
+function v9Open() {
   return new Promise(function(res, rej) {
     if (v8DB) return res(v8DB);
-    var req = indexedDB.open('pwa-v8', 1);
+    var req = indexedDB.open(V9_DB_NAME, 1);
     req.onupgradeneeded = function() {
       var db = req.result;
       if (!db.objectStoreNames.contains('sessions')) db.createObjectStore('sessions');
@@ -1065,6 +1085,29 @@ function v8Open() {
     req.onerror = function() { rej(req.error); };
   });
 }
+function v8Open() {
+  return v9Open().then(function(db) {
+    // 首次開啟新庫時，檢查舊庫有沒有資料要搬
+    if (v9Migrated) return db;
+    v9Migrated = true;
+    return v9ReadOldDB().then(function(oldData) {
+      if (!oldData) return db;
+      return new Promise(function(res) {
+        try {
+          var rw = db.transaction('sessions', 'readwrite').objectStore('sessions');
+          var put = rw.put(oldData, 'current');
+          put.onsuccess = function() {
+            // 搬移成功 → 刪掉舊庫，避免下次重複搬
+            try { indexedDB.deleteDatabase(V8_DB_NAME); } catch (e) {}
+            res(db);
+          };
+          put.onerror = function() { res(db); };
+        } catch (e) { res(db); }
+      });
+    });
+  });
+}
+
 function v8Save() {
   if (!_photos.length && !_restaurant) return;
   v8Open().then(function(db) {
@@ -1143,7 +1186,7 @@ function v8Export() {
   if (typeof JSZip === 'undefined') { alert('打包工具未載入，請檢查網路後重新整理頁面再試'); return; }
   var zip = new JSZip();
   var manifest = {
-    app: 'pwa-v8', version: 1, exportedAt: new Date().toISOString(),
+    app: 'pwa-v9', version: 1, exportedAt: new Date().toISOString(),
     restaurant: _restaurant,
     photoSeq: _photoSeq,
     photos: []

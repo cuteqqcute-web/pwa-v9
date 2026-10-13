@@ -1,5 +1,5 @@
-// V8 離線支援（網頁採網路優先，確保更新即時生效；失敗才用快取）
-var CACHE = 'pwa-v8-v1';
+// V9 離線支援（網頁採網路優先，確保更新即時生效；失敗才用快取）
+var CACHE = 'pwa-v9-v1';
 var PRECACHE = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'icon-180.png'];
 
 self.addEventListener('install', function(e) {
